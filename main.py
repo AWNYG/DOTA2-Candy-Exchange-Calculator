@@ -129,6 +129,51 @@ def reconstruct_path(
     return path
 
 
+def solve_max_growth(
+    inventory: tuple[int, ...],
+    maximum: int,
+    steps: list[Step],
+) -> tuple[list[tuple[tuple[int, ...], Step, tuple[int, ...]]] | None, int | None]:
+    start_total = total_candies(inventory)
+    parent_map: dict[tuple[int, ...], tuple[tuple[int, ...] | None, Step | None]] = {inventory: (None, None)}
+    distance: dict[tuple[int, ...], int] = {inventory: 0}
+    queue: list[tuple[int, ...]] = [inventory]
+    head = 0
+
+    best_state = inventory
+    best_total = start_total
+    best_steps = 0
+
+    while head < len(queue):
+        state = queue[head]
+        head += 1
+        current_steps = distance[state]
+
+        for step in steps:
+            if not can_apply(state, step.consume):
+                continue
+            next_state = apply_step(state, step)
+            if total_candies(next_state) > maximum:
+                continue
+            if next_state in parent_map:
+                continue
+
+            parent_map[next_state] = (state, step)
+            distance[next_state] = current_steps + 1
+            queue.append(next_state)
+
+            next_total = total_candies(next_state)
+            next_steps = current_steps + 1
+            if next_total > best_total or (next_total == best_total and next_steps < best_steps):
+                best_state = next_state
+                best_total = next_total
+                best_steps = next_steps
+
+    if best_total <= start_total:
+        return None, None
+    return reconstruct_path(best_state, parent_map), best_total
+
+
 def solve_min_loss(
     inventory: tuple[int, ...],
     target: tuple[int, ...],
@@ -198,6 +243,33 @@ def render_solution(
     return "\n".join(lines)
 
 
+def render_growth_solution(
+    inventory: tuple[int, ...],
+    maximum: int,
+    names: list[str],
+    path: list[tuple[tuple[int, ...], Step, tuple[int, ...]]] | None,
+    best_total: int | None,
+) -> str:
+    start_total = total_candies(inventory)
+    lines = [
+        "库存增量分析：全部规则",
+        f"仓库容量上限: {maximum}",
+        f"初始库存: {format_counts(inventory, names)} (总数={start_total})",
+    ]
+    if path is None:
+        lines.append("结果: 不能让总糖果数变多")
+        return "\n".join(lines)
+
+    sequence = [step.label for _, step, _ in path]
+    final_state = path[-1][2]
+    lines.append("结果: 可以让总糖果数变多")
+    lines.append("序列: " + " -> ".join(sequence))
+    lines.append(f"步骤数: {len(path)}")
+    lines.append(f"最终库存: {format_counts(final_state, names)} (总数={total_candies(final_state)})")
+    lines.append(f"净增量: {best_total - start_total}")
+    return "\n".join(lines)
+
+
 def validate_initial_state(inventory: tuple[int, ...], maximum: int) -> None:
     if total_candies(inventory) > maximum:
         raise ValueError(
@@ -217,7 +289,10 @@ def main() -> None:
     all_steps = rule_steps + build_builtin_lossy_steps(candy_count)
     names = candy_names(candy_count)
     path, total_loss = solve_min_loss(inventory, target, maximum, all_steps)
+    growth_path, best_total = solve_max_growth(inventory, maximum, all_steps)
     print(render_solution(inventory, target, maximum, names, path, total_loss))
+    print()
+    print(render_growth_solution(inventory, maximum, names, growth_path, best_total))
 
 
 if __name__ == "__main__":
